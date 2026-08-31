@@ -1,133 +1,15 @@
-from tmlib.module.PySide import QtCore, QtGui, QtWidgets
+from tmlib.module.PySide import QtCore, QtWidgets
 
 import os
-import importlib.util
-import inspect
-import ast
 import subprocess
 from pathlib import Path
 import maya.cmds as cmds
 from tmlib.ui.interface_template import ToolkitWindow
 import platform
-import sys
 
 import tmlib
 from tmlib.core import QuickData, File
 import json
-
-
-# class LocalScriptModel(QtCore.QAbstractListModel):
-
-
-# ------------------------------------------------------------------
-# Helper Functions
-# ------------------------------------------------------------------
-
-
-def import_all_functions(file_path):
-    path = Path(file_path)
-    module_name = path.stem
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    function_list = []
-
-    # ดึงรายการชื่อฟังก์ชันทั้งหมดที่ถูกนิยามไว้ในไฟล์นี้จริงๆ
-    # (เช็คจากสคริปต์ที่เราเพิ่ง exec_module ไป)
-    for name, obj in inspect.getmembers(module):
-        # 1. เช็คว่าชื่อนี้มีอยู่ใน module's dict และไม่ใช่การ import มาจากที่อื่น
-        # ฟังก์ชันที่โดน decorate จะยังอยู่ใน module.__dict__ ของไฟล์ตัวเอง
-        if name in module.__dict__:
-            # ตรวจสอบว่าเป็นสิ่งที่เรียกใช้งานได้ (Function หรือ Wrapped Function)
-            if inspect.isfunction(obj) or inspect.isroutine(obj):
-
-                # ข้ามพวกตัวแปรระบบ __name__, __doc__
-                if name.startswith("__"):
-                    continue
-
-                # 2. พยายามเจาะหาฟังก์ชันดั้งเดิม (Unwrap) เพื่อเอาค่า Signature/Docstring
-                # ถ้า decorator ไม่ได้ใช้ wraps เราจะดึงข้อมูลยากหน่อย
-                # แต่เราสามารถดึงข้อมูลพื้นฐานได้
-                try:
-                    # ใช้ __wrapped__ ถ้า decorator มีการใช้ functools.wraps
-                    real_obj = getattr(obj, "__wrapped__", obj)
-                    signature = inspect.signature(real_obj)
-                    docstring = inspect.getdoc(real_obj) or "No docstring available."
-                except:
-                    # ถ้าดึง signature ไม่ได้จริงๆ (กรณี decorator ซับซ้อน)
-                    signature = None
-                    docstring = "Decorated function (Docstring hidden)"
-
-                args_details = {}
-                is_pure = True
-
-                if signature:
-                    params = signature.parameters
-                    if not params:
-                        is_pure = True
-                    else:
-                        for param_name, param in params.items():
-                            has_default = param.default is not inspect._empty
-                            if not has_default:
-                                is_pure = False
-
-                            args_details[param_name] = {
-                                "type": (
-                                    str(param.annotation)
-                                    if param.annotation is not inspect._empty
-                                    else None
-                                ),
-                                "default": str(param.default) if has_default else None,
-                            }
-
-                function_list.append(
-                    {
-                        "name": name,
-                        "docstring": docstring,
-                        "arguments": args_details,
-                        "pure": is_pure,
-                        "path": str(file_path),
-                    }
-                )
-
-    return function_list
-
-
-def get_function_object(file_path, func_name):
-    """
-    Load or reload a module from file path, then return function object
-    """
-
-    path = Path(file_path)
-    module_name = path.stem
-    module_dir = str(path.parent)
-
-    # make sure path is importable
-    if module_dir not in sys.path:
-        sys.path.insert(0, module_dir)
-
-    # import or reload
-    if module_name in sys.modules:
-        module = importlib.reload(sys.modules[module_name])
-    else:
-        module = importlib.import_module(module_name)
-
-    return getattr(module, func_name, None)
-
-
-def undoable(func):
-    """Maya undo wrapper"""
-
-    def wrapper(*args, **kwargs):
-        cmds.undoInfo(openChunk=True)
-        try:
-            result = func(*args, **kwargs)
-            return result
-        finally:
-            cmds.undoInfo(closeChunk=True)
-
-    return wrapper
 
 
 # ------------------------------------------------------------------
@@ -140,15 +22,7 @@ class MainWindow(ToolkitWindow):
         super(MainWindow, self).__init__(os.path.basename(os.path.dirname(__file__)))
 
         self.quick_data_folder = QuickData.get_quick_data_dir()
-        self.dict_current_description = {}
         self.list_current_local_script_file = []
-        self.list_function_data = []
-        self.target_file_paths = []
-        # self.list.model().rowsMoved.connect(self.drag_drop_happened)
-
-        # self.import_functions()
-        # self.reload_list_widget_library()
-        # self.reload_list_widget_functions()
 
         self.init_quick_data_button()
         self.on_reload_local_script_clicked()
@@ -168,18 +42,6 @@ class MainWindow(ToolkitWindow):
             self.reload_local_script_combobox()
             self.reload_local_script_list_widget()
             self.make_local_library_metadata_exists()
-
-    def import_functions(self):
-        config_path = os.path.join(os.path.dirname(__file__), "Config")
-        global_path = os.path.join(config_path, "GlobalPaths.json")
-        dict_global_paths = File.load_json_file_to_dict(file_path=global_path)
-
-        print(dict_global_paths)
-        self.target_file_paths = dict_global_paths["paths"]
-
-        for path in self.target_file_paths:
-            if os.path.exists(path):
-                self.list_function_data += import_all_functions(path)
 
     def on_reload_local_script_clicked(self):
         if self.quick_data_folder:
@@ -289,76 +151,8 @@ class MainWindow(ToolkitWindow):
         #         item = self.ui.listWidget_local_scripts.takeItem(current_row)
         #         self.ui.listWidget_local_scripts.insertItem(target_index, item)
 
-    def reload_list_widget_library(self):
-        self.ui.listWidget_library.clear()
-        self.ui.listWidget_library.addItem("All")
-
-        for path in self.target_file_paths:
-            print("combobox:", path)
-            self.ui.listWidget_library.addItem(os.path.basename(path))
-
-    def reload_list_widget_functions(self):
-        """Populate the list widget with colors and data"""
-
-        self.ui.listWidget_functions.clear()
-        # self.ui.listWidget_functions.setCurrentRow(0)
-
-        current_selected = self.ui.listWidget_library.selectedItems()
-
-        print("current selected : ",current_selected)
-        if not current_selected:
-            return
-        else:
-            current_selected = current_selected[0]
-
-        current_file_filter = current_selected.text()
-        search_text = self.ui.lineEdit_search.text().lower().strip()
-
-        for func_data in self.list_function_data:
-            # Filter: Filename
-            if current_file_filter != "All":
-                if os.path.basename(func_data["path"]) != current_file_filter:
-                    continue
-
-            # Filter: Search Text
-            if search_text and search_text not in func_data["name"].lower():
-                continue
-
-            item = QtWidgets.QListWidgetItem(func_data["name"])
-            item.setData(QtCore.Qt.UserRole, func_data)  # เก็บ dict ไว้ใน item
-
-            # Color: Yellow if Pure
-            if func_data["pure"]:
-                item.setForeground(QtGui.QColor("yellow"))
-
-            self.ui.listWidget_functions.addItem(item)
-
     def connect_signal_ui(self):
-        # edit extra path
-        # self.ui.pushButton_edit_extra_path.clicked.connect(self.open_extra_path_file)
-        # self.ui.listWidget_library.itemDoubleClicked.connect(self.edit_library_script)
-
-        # Standard Signals
-        # self.ui.listWidget_functions.itemClicked.connect(self.load_description)
-        # self.ui.listWidget_functions.itemDoubleClicked.connect(
-            # self.quick_run_pure_function
-        # )
-        # self.ui.pushButton_run_script.clicked.connect(self.run_script)
         self.ui.pushButton_run_local_scripts.clicked.connect(self.run_local_script)
-
-        # # Filter Signals
-        # self.ui.lineEdit_search.textChanged.connect(self.reload_list_widget_functions)
-        # self.ui.listWidget_library.itemSelectionChanged.connect(
-        #     self.reload_list_widget_functions
-        # )
-
-        # # Context Menu
-        # self.ui.listWidget_functions.setContextMenuPolicy(
-        #     QtCore.Qt.CustomContextMenu
-        # )
-        # self.ui.listWidget_functions.customContextMenuRequested.connect(
-        #     self.show_context_menu
-        # )
 
         # Quick Data / Local Script
         self.ui.pushButton_path_quick_data_folder.clicked.connect(
@@ -377,33 +171,6 @@ class MainWindow(ToolkitWindow):
             self.reload_local_script_list_widget
         )
         
-
-    def edit_library_script(self):
-        sel = self.ui.listWidget_library.selectedItems()
-
-        if not sel:
-            return
-        
-        sel= sel[0].text()
-        print("Target File Paths ",self.target_file_paths)
-        for each in self.target_file_paths:
-            if sel in each:
-                self.launch_script_file(each)
-        
-    def launch_script_file(self,path):
-        if platform.system() == "Windows":
-            os.startfile(path)
-
-        else:
-            # macOS and Linux
-            subprocess.Popen(["code", "--goto", path])
-
-    def open_extra_path_file(self):
-        config_path = os.path.join(os.path.dirname(__file__), "Config")
-        global_path = os.path.join(config_path, "GlobalPaths.json")
-
-        self.launch_script_file(global_path)
-
 
     def edit_local_script(self):
         item = self.ui.listWidget_local_scripts.currentItem().text()
@@ -506,98 +273,6 @@ class MainWindow(ToolkitWindow):
         current_key = self.ui.comboBox_local_scripts.currentText()
         os.startfile(os.path.join(self.quick_data_folder, "Python", current_key))
 
-    def show_context_menu(self, position):
-        item = self.ui.listWidget_functions.itemAt(position)
-        if not item:
-            return
-
-        func_data = item.data(QtCore.Qt.UserRole)
-
-        menu = QtWidgets.QMenu()
-        edit_action = menu.addAction("Edit Script...")
-        info_action = menu.addAction("Info")
-
-        action = menu.exec_(self.ui.listWidget_functions.mapToGlobal(position))
-
-        if action == edit_action:
-            file_path = func_data["path"]
-            command = ["code", "--goto", file_path]
-
-            # Check if the OS is Windows
-            is_windows = platform.system() == "Windows"
-
-            try:
-                subprocess.Popen(command, shell=is_windows)
-            except FileNotFoundError:
-                print(
-                    "Error: 'code' command not found. Ensure VS Code is in your PATH."
-                )
-        elif action == info_action:
-            info_text = json.dumps(func_data, indent=4)
-            cmds.confirmDialog(
-                title=f"Function: {func_data['name']}", message=info_text
-            )
-
-    def quick_run_pure_function(self, item):
-        """Double-click handler for pure functions"""
-        func_data = item.data(QtCore.Qt.UserRole)
-
-        if not func_data["pure"]:
-            cmds.warning(
-                f"'{func_data['name']}' is not a pure function. Please fill arguments."
-            )
-            return
-
-        func_obj = get_function_object(func_data["path"], func_data["name"])
-        if func_obj:
-            print(f"Quick Running: {func_data['name']}")
-            undoable(func_obj)()
-
-    def load_description(self):
-        item = self.ui.listWidget_functions.currentItem()
-        if not item:
-            return
-
-        func_data = item.data(QtCore.Qt.UserRole)
-
-        self.ui.textBrowser_docstring.setPlainText(func_data["docstring"])
-        self.clear_layout(self.ui.layout_arguments)
-        self.ui.label_function_name.setText(func_data["name"])
-
-        self.dict_current_description = {
-            "func_name": func_data["name"],
-            "path": func_data["path"],
-            "args": {},
-        }
-
-        for arg_name, arg_info in func_data["arguments"].items():
-            _, _, line_edit = add_input_row(
-                self.ui.layout_arguments,
-                arg_name,
-                default=arg_info["default"],
-                type=arg_info["type"],
-            )
-            self.dict_current_description["args"][arg_name] = {
-                "input": line_edit,
-                "type": arg_info["type"],
-            }
-
-    def run_script(self):
-        func_name = self.dict_current_description.get("func_name")
-        file_path = self.dict_current_description.get("path")
-        if not func_name:
-            return
-
-        func_obj = get_function_object(file_path, func_name)
-
-        prepared_args = {}
-        for arg_name, data in self.dict_current_description["args"].items():
-            ui_value = data["input"].text()
-            prepared_args[arg_name] = self.cast_to_type(ui_value)
-
-        if func_obj:
-            undoable(func_obj)(**prepared_args)
-
     def run_local_script(self):
         list_order = []
 
@@ -619,32 +294,6 @@ class MainWindow(ToolkitWindow):
             ),
             order=list_order,
         )
-
-    def cast_to_type(self, value_str):
-        if not value_str or value_str.strip() == "":
-            return None
-        value_str = value_str.strip()
-        if value_str.lower() in ("true", "yes", "on"):
-            return True
-        if value_str.lower() in ("false", "no", "off"):
-            return False
-        try:
-            return ast.literal_eval(value_str)
-        except:
-            if "," in value_str:
-                return [i.strip() for i in value_str.split(",") if i.strip()]
-        return value_str
-
-    def clear_layout(self, layout):
-        if layout is None:
-            return
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-            elif child.layout():
-                self.clear_layout(child.layout())
-
 
     # Quick Data
     def reload_quick_data_button(self):
@@ -735,50 +384,3 @@ class MainWindow(ToolkitWindow):
                 json.dump(data,json_file,indent=4)
         
 
-
-
-# ------------------------------------------------------------------
-# UI Helpers
-# ------------------------------------------------------------------
-
-
-def add_input_row(parent_layout, label_text, default, type):
-    h_layout = QtWidgets.QHBoxLayout()
-    line_edit = QtWidgets.QLineEdit()
-    label = QtWidgets.QLabel(str(type.__name__) if type else "None")
-
-    btn = QtWidgets.QPushButton(label_text)
-    btn.setFixedWidth(120)
-
-    h_layout.addWidget(btn)
-    h_layout.addWidget(line_edit)
-    h_layout.addWidget(label)
-
-    if isinstance(parent_layout, QtWidgets.QGridLayout):
-        parent_layout.addLayout(h_layout, parent_layout.rowCount(), 0)
-    else:
-        parent_layout.addLayout(h_layout)
-
-    if default and default != "None":
-        line_edit.setText(default)
-
-    btn.clicked.connect(lambda: line_edit_action(line_edit, type))
-    line_edit.setClearButtonEnabled(True)
-    return label_text, btn, line_edit
-
-
-def line_edit_action(line_edit, typ):
-#     if (cmds.selectPref(tso=True, q=True)==0):
-#     cmds.selectPref(tso=True)
-    
-# a = cmds.ls(orderedSelection =1,fl=1)
-
-    sel = cmds.ls(sl=1)
-
-    if not sel:
-        return
-
-    if typ == list:
-        line_edit.setText(str(sel))
-    else:
-        line_edit.setText(str(sel[0]))

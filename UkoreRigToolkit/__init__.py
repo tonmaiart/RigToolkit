@@ -58,10 +58,12 @@ try:
             command="import UkoreRigToolkit; UkoreRigToolkit.attribute()",
             order=220,
         ),
-        # --- Rig (same ids/order/category MayaToolkit used to own) ---
+        # --- Rig (same order/category MayaToolkit used to own; "local_script"
+        # renamed to "python_reader"/"Python Reader" to match the actual
+        # tool name) ---
         MenuItemSpec(
-            id="local_script",
-            label="Local Script...",
+            id="python_reader",
+            label="Python Reader",
             category="Rig",
             command="import UkoreRigToolkit; UkoreRigToolkit.python_reader()",
             order=10,
