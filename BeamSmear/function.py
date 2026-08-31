@@ -7,7 +7,7 @@ can share the same node, so most lookups here go by node+alias rather than
 by a single "current node".
 """
 
-import pymel.core as pm
+import pymeltm.core as pm
 import maya.cmds as mc
 
 from tmlib.core import BlendShape

@@ -1,7 +1,7 @@
 import os
 import importlib
 
-import pymel.core as pm
+import pymeltm.core as pm
 import maya.cmds as mc
 
 from tmlib.module.PySide import QtCore
