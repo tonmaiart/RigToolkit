@@ -60,6 +60,8 @@ class MainWindow(ToolkitWindow):
             return
 
         for dir_name in os.listdir(os.path.join(self.quick_data_folder, "Python")):
+            if dir_name == "__pycache__":
+                continue
             if os.path.isdir(os.path.join(self.quick_data_folder, "Python", dir_name)):
                 self.ui.comboBox_local_scripts.addItem(dir_name)
 
@@ -102,54 +104,49 @@ class MainWindow(ToolkitWindow):
         # make sure path exist
         os.makedirs(current_key_script_path, exist_ok=True)
 
-        # add item to list widget
+        # ====================================
+        # load saved metadata (order / mute state)
+        # ====================================
+
+        json_path = os.path.join(current_key_script_path, current_key_name + ".json")
+        metadata = File.load_json_file_to_dict(json_path) or {}
+        saved_order = metadata.get("order") or []
+        saved_muted = set(metadata.get("muted") or [])
+
+        # build item data
         self.list_current_local_script_file = []
         for name in os.listdir(current_key_script_path):
             if not ".py" in name:
                 continue
 
+            script_name = name.split(".")[0]
+
             self.list_current_local_script_file.append(
                 {
-                    "name": name.split(".")[0],
+                    "name": script_name,
                     "filename": name,
                     "path": os.path.join(current_key_script_path, name),
-                    "muted": False,
+                    "muted": script_name in saved_muted,
                 }
             )
 
-            self.ui.listWidget_local_scripts.addItem(name.split(".")[0])
+        # apply saved order (scripts not found in saved order keep listdir order, appended at the end)
+        if saved_order:
+            order_index = {name: i for i, name in enumerate(saved_order)}
+            self.list_current_local_script_file.sort(
+                key=lambda entry: order_index.get(entry["name"], len(saved_order))
+            )
 
-        # # ====================================
-        # # Update if json data metadata exists 
-        # # ====================================
+        # add item to list widget
+        for entry in self.list_current_local_script_file:
+            item = QtWidgets.QListWidgetItem(entry["name"])
 
-        # data = File.load_json_file_to_dict(os.path.join(current_key_script_path, current_key_name + ".json"))
+            if entry["muted"]:
+                font = item.font()
+                font.setStrikeOut(True)
+                item.setFont(font)
 
-        # if data is None:
-        #     return
-
-        # if "order" not in data:
-        #     return
-        
-        # if data["order"] is None:
-        #     return
-        
-        # # Build a dict of {text: row_index}
-        # item_map = {self.ui.listWidget_local_scripts.item(i).text(): i for i in range(self.ui.listWidget_local_scripts.count())}
-
-        # # Build sorted row list, skip if not found
-        # sorted_rows = [item_map[text] for text in data["order"] if text in item_map]
-
-        # # Reorder by taking rows out and re-inserting
-        # for target_index, source_row in enumerate(sorted_rows):
-        #     # source_row may have shifted, find current position
-        #     current_row = next(
-        #         i for i in range(self.ui.listWidget_local_scripts.count())
-        #         if self.ui.listWidget_local_scripts.item(i).text() == data["order"][target_index]
-        #     )
-        #     if current_row != target_index:
-        #         item = self.ui.listWidget_local_scripts.takeItem(current_row)
-        #         self.ui.listWidget_local_scripts.insertItem(target_index, item)
+            self.ui.listWidget_local_scripts.addItem(item)
 
     def connect_signal_ui(self):
         self.ui.pushButton_run_local_scripts.clicked.connect(self.run_local_script)
@@ -244,6 +241,9 @@ class MainWindow(ToolkitWindow):
                         first_mute_state = data["muted"]
 
                         print(first_mute_state)
+
+                self.make_local_library_metadata_exists()
+                self.update_local_library_metadata()
 
             elif action == action_edit_script:
                 self.edit_local_script()
@@ -353,8 +353,7 @@ class MainWindow(ToolkitWindow):
         current_python_folder_name = self.ui.comboBox_local_scripts.currentText()
         json_path = os.path.join(current_quick_data_folder_dir,"Python",current_python_folder_name,current_python_folder_name+".json")
 
-
-        data = File.load_json_file_to_dict(json_path)
+        data = File.load_json_file_to_dict(json_path) or {}
 
         # update order based on current one to json file metadata
         all_items = []
@@ -363,9 +362,15 @@ class MainWindow(ToolkitWindow):
 
         data["order"] = all_items
 
-        if os.path.exists(json_path):
-            with open(json_path,'w') as json_file:
-                json.dump(data,json_file,indent=4)
+        # update mute status based on current in-memory state
+        data["muted"] = [
+            entry["name"]
+            for entry in self.list_current_local_script_file
+            if entry.get("muted")
+        ]
+
+        with open(json_path,'w') as json_file:
+            json.dump(data,json_file,indent=4)
     
     def make_local_library_metadata_exists(self):
         """
