@@ -10,7 +10,7 @@ MayaToolkit's `tmlib` being on `sys.path` (see `manifest.json`'s
 `requires`), no direct import relationship, just the shared
 `maya_launcher_env_bridge` `PluginConfigStore` convention.
 
-Tools: `Attribute`, `BeamSmear`, `EasyController`, `PythonReader`,
+Tools: `Attribute`, `BeamSmear`, `EasyController`, `MergeSkin`, `PythonReader`,
 `QuickData`, `Renamer`, `Snapper`, `WeightPuller`.
 
 `plugin.py`'s `register(api)` contributes this folder's own root to the
@@ -50,3 +50,26 @@ UkoreMaya`/`from UkoreMaya.core import ...`/`from UkoreMaya.menu import
 `tmlib.core.File.launch()` itself relies on. The "Local Script"/"Quick
 Data" feature (a separate, unrelated feature reading scripts from the
 active Quick Data folder, not from `custom_library`) is untouched.
+
+**2026-09-02: `MergeSkin` added.** Pure-Python port of the third-party
+`Maya-mergeSkin` MPxCommand plugin (github.com/Faruq00/Maya-mergeSkin) —
+no compiled `.mll` involved. `MergeSkin/function.py` reimplements the
+algorithm with `maya.api.OpenMaya`/`OpenMayaAnim` (closest-point-per-vertex
+lookup + `MFnSkinCluster.getWeights`/`setWeights`, influences matched by
+short name): for each base mesh's skinCluster, transfer each vertex's
+weights onto the closest vertex on the target mesh's own skinCluster.
+`MergeSkin/interface.py` + `ui.ui` wrap it in the same `ToolkitWindow`
+pattern as `BeamSmear`/`WeightPuller` (pick base objects from selection,
+pick a target, optional debug log). New tool, registered as `merge_skin`
+("Merge Skin") in the "Rig" category, order 60 — never had a MayaToolkit
+menu item.
+
+If the target mesh already has ngSkinTools2 layers enabled,
+`function._get_ngskintools_layer`/`_apply_ngskintools_weights` route the
+transferred weights into the mesh's active ngSkinTools2 layer instead of
+the raw skinCluster (same reason `WeightPuller` special-cases
+ngSkinTools2 — writing straight to a layers-enabled skinCluster gets
+silently overwritten by ngSkinTools2's own composite). MergeSkin never
+creates layers on a mesh that doesn't already use them, and falls back to
+the plain skinCluster path (via `mc.error`-free `try`/`except`) if
+`ngSkinTools2` isn't installed or its layers API call fails.

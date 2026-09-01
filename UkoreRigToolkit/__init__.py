@@ -38,6 +38,10 @@ def beam_smear():
     File.launch("BeamSmear")
 
 
+def merge_skin():
+    File.launch("MergeSkin")
+
+
 # ------------- Register menu items into ukore_menu's central registry ----
 try:
     from UkoreMenu import registry, MenuItemSpec, ReloadHandlerSpec, reload_package
@@ -105,6 +109,16 @@ try:
             command="import UkoreRigToolkit; UkoreRigToolkit.beam_smear()",
             order=55,
         ),
+        # Python port of Maya-mergeSkin (Faruq00) -- transfers skin weights
+        # from one or more base meshes onto a target mesh by closest vertex,
+        # matching influences by name. Never had a MayaToolkit menu item.
+        MenuItemSpec(
+            id="merge_skin",
+            label="Merge Skin",
+            category="Rig",
+            command="import UkoreRigToolkit; UkoreRigToolkit.merge_skin()",
+            order=60,
+        ),
     ]
 
     for item in items:
@@ -131,4 +145,5 @@ __all__ = [
     "snapper",
     "weight_puller",
     "beam_smear",
+    "merge_skin",
 ]
