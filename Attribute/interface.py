@@ -1,5 +1,3 @@
-from email.mime import base
-from tmlib import config
 from tmlib.core import (
     Scene,
     Utility,
@@ -15,7 +13,7 @@ from tmlib.module.PySide import QtCore, QtGui, QtWidgets, QAction
 
 import os, importlib, webbrowser, inspect, configparser, re, json
 from tmlib.ui.interface_template import ToolkitWindow
-import pymel.core as pm
+import pymeltm.core as pm
 import xml.etree.ElementTree as ET
 import maya.cmds as cmds
 import ast
