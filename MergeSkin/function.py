@@ -64,11 +64,11 @@ def _closest_vertex_id(mesh_fn, position):
     return nearest_id
 
 
-def _get_ngskintools_layer(target):
-    """Return the ngSkinTools2 layer to write target's transferred weights into, or None.
+def _get_ngskintools_layers(target):
+    """Return the ngSkinTools2 Layers wrapper for target, or None.
 
-    Only returns a layer when ngSkinTools2 is installed AND target already has
-    layers initialized -- writing straight into a layers-enabled mesh's
+    Only returns a wrapper when ngSkinTools2 is installed AND target already
+    has layers initialized -- writing straight into a layers-enabled mesh's
     skinCluster gets silently overwritten by ngSkinTools2's own composite next
     recompute, same reason WeightPuller special-cases ngSkinTools2 for its
     move/swap. MergeSkin never initializes layers on a mesh that doesn't
@@ -82,13 +82,7 @@ def _get_ngskintools_layer(target):
     try:
         if not get_layers_enabled([target]):
             return None
-
-        layers = Layers(target)
-        layer = getattr(layers, "current_layer", None)
-        if layer is None:
-            existing = layers.list()
-            layer = existing[0] if existing else None
-        return layer
+        return Layers(target)
     except Exception as exc:
         om.MGlobal.displayWarning(
             "MergeSkin: could not access ngSkinTools2 layers on {} ({}); "
@@ -97,25 +91,42 @@ def _get_ngskintools_layer(target):
         return None
 
 
-def _apply_ngskintools_weights(layer, vertex_data):
-    """Write vertex_data ({target_vtx_id: {inf_index: weight}}) into an ngSkinTools2 layer.
+def _get_or_create_layer(layers, name):
+    for layer in layers.list():
+        if getattr(layer, "name", None) == name:
+            return layer
+    return layers.add(name)
 
-    Layer.set_weights takes a full per-vertex array per influence, so each
-    affected influence's existing array is read once and only the transferred
-    vertex entries are overwritten -- untouched vertices on that influence are
-    preserved. Influences absent from a given vertex's distribution are zeroed
-    at that vertex, mirroring MFnSkinCluster.setWeights(normalize=False)'s
-    full-replace-per-vertex behavior in the non-layers path below.
+
+def _apply_ngskintools_layer(layers, layer_name, vertex_data, num_vertices):
+    """Write one base object's transferred vertex_data into its own ngSkinTools2 layer.
+
+    vertex_data is {target_vtx_id: {inf_index: weight}} for a single base
+    object. A dedicated layer (created if it doesn't already exist, reused
+    and fully rebuilt on re-runs otherwise) keeps each base object's
+    contribution separable in the layer stack, and its mask is set to 1.0
+    only on the vertices that base object actually mapped onto -- 0.0
+    (fully subtracted) everywhere else -- so the layer can never bleed
+    outside its own region regardless of what other layers/base objects do.
     """
+    layer = _get_or_create_layer(layers, layer_name)
+
     affected_influences = set()
     for distribution in vertex_data.values():
         affected_influences.update(distribution.keys())
 
     for inf_index in affected_influences:
-        weights = list(layer.get_weights(inf_index))
+        weights = [0.0] * num_vertices
         for vtx_id, distribution in vertex_data.items():
             weights[vtx_id] = distribution.get(inf_index, 0.0)
         layer.set_weights(inf_index, weights)
+
+    mask = [0.0] * num_vertices
+    for vtx_id in vertex_data:
+        mask[vtx_id] = 1.0
+    layer.set_mask(mask)
+
+    return layer
 
 
 def _grouped_skin_weights(skin_cluster_obj, mesh_dag_path):
@@ -171,14 +182,13 @@ def merge_skin(base_objects, target, debug_log=False):
         om.MGlobal.displayInfo("Target object is: {}".format(target_dag.fullPathName()))
 
     target_mesh_fn = om.MFnMesh(target_dag)
-    ng_layer = _get_ngskintools_layer(target)
-    ng_vertex_data = {} if ng_layer is not None else None
+    num_target_vertices = target_mesh_fn.numVertices
+    ng_layers = _get_ngskintools_layers(target)
 
-    if debug_log and ng_layer is not None:
+    if debug_log and ng_layers is not None:
         om.MGlobal.displayInfo(
-            "Target has ngSkinTools2 layers enabled -- writing into layer '{}'.".format(
-                getattr(ng_layer, "name", ng_layer)
-            )
+            "Target has ngSkinTools2 layers enabled -- each base object will "
+            "get its own masked layer."
         )
 
     for base_name in base_objects:
@@ -196,6 +206,10 @@ def merge_skin(base_objects, target, debug_log=False):
 
         records = _grouped_skin_weights(base_skin_obj, base_dag)
         base_mesh_fn = om.MFnMesh(base_dag)
+        # Per-base-object, not shared across base_objects -- each base gets
+        # its own ngSkinTools2 layer/mask below, so its region never mixes
+        # with another base object's.
+        ng_vertex_data = {} if ng_layers is not None else None
 
         for v_idx, influences in enumerate(records):
             if not influences:
@@ -236,7 +250,16 @@ def merge_skin(base_objects, target, debug_log=False):
                 normalize=False,
             )
 
-    if ng_vertex_data:
-        _apply_ngskintools_weights(ng_layer, ng_vertex_data)
+        if ng_vertex_data:
+            layer_name = "MergeSkin_{}".format(base_name.split("|")[-1])
+            _apply_ngskintools_layer(
+                ng_layers, layer_name, ng_vertex_data, num_target_vertices
+            )
+            if debug_log:
+                om.MGlobal.displayInfo(
+                    "Wrote ngSkinTools2 layer '{}' for base {}.".format(
+                        layer_name, base_dag.fullPathName()
+                    )
+                )
 
     om.MGlobal.displayInfo("Skin weights transfer completed successfully!")

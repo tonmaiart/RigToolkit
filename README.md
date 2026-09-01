@@ -65,11 +65,15 @@ pick a target, optional debug log). New tool, registered as `merge_skin`
 menu item.
 
 If the target mesh already has ngSkinTools2 layers enabled,
-`function._get_ngskintools_layer`/`_apply_ngskintools_weights` route the
-transferred weights into the mesh's active ngSkinTools2 layer instead of
-the raw skinCluster (same reason `WeightPuller` special-cases
-ngSkinTools2 — writing straight to a layers-enabled skinCluster gets
-silently overwritten by ngSkinTools2's own composite). MergeSkin never
-creates layers on a mesh that doesn't already use them, and falls back to
-the plain skinCluster path (via `mc.error`-free `try`/`except`) if
+`function._get_ngskintools_layers`/`_apply_ngskintools_layer` route the
+transferred weights there instead of the raw skinCluster (same reason
+`WeightPuller` special-cases ngSkinTools2 — writing straight to a
+layers-enabled skinCluster gets silently overwritten by ngSkinTools2's own
+composite). Each base object gets its **own** dedicated layer
+(`MergeSkin_<base_name>`, created if missing, fully rebuilt on re-runs),
+with its mask set to 1.0 only on the target vertices that base object
+actually mapped onto and 0.0 (fully subtracted) everywhere else — so
+overlapping base objects can never bleed into each other's region, no
+manual masking needed. MergeSkin never creates layers on a target that
+doesn't already use them, and falls back to the plain skinCluster path if
 `ngSkinTools2` isn't installed or its layers API call fails.
