@@ -1,5 +1,5 @@
 import tmlib
-from tmlib.core import QuickData, Scene, Utility, Validate, SkinWeight
+from tmlib.core import QuickData, Scene, SkinWeight
 
 import maya.cmds as cmds
 import maya.mel as mel
@@ -7,9 +7,6 @@ import os
 import fnmatch
 
 import UkoreMaya
-
-from UkoreMaya.core import Pipeline, utils
-from UkoreMaya.menu import General, Skin
 
 def import_all_reference_and_clean_namespaces():
     Scene.import_all_references()
@@ -52,74 +49,6 @@ def toggle_joints_via_set():
 
 def clean_up_rig_file():
     Scene.clean_up_scene()
-
-
-def update_model_for_rig():
-    """This Used for Update model for rig in one click"""
-
-    # remove old geo grp if exists
-
-    if cmds.objExists("old_geo"):
-        cmds.delete("old_geo")
-
-    # store data
-    cmds.select(Pipeline.list_meshes_with_suffix_geo())
-    QuickData.export_skin_quick()
-
-    # reference current version
-    cmds.select(
-        "*:geo",
-    )
-    sel = cmds.ls(sl=1)
-
-    if not sel:
-        raise Exception("Not found geo group")
-
-    namespace = sel[0].split(":")[0]
-
-    ref_node = cmds.referenceQuery(sel[0], referenceNode=True)
-    ref_path = cmds.referenceQuery(ref_node, filename=True)
-
-    # import all reference and namspaces
-    Scene.import_all_references()
-    Scene.remove_all_namespaces()
-
-    if not cmds.objExists("Delete_Grp"):
-        cmds.group(em=1, n="Delete_Grp")
-
-    # rename old geo grp and parent to delete grp
-    cmds.parent("geo", "Delete_Grp")
-    cmds.rename("geo", f"old_geo")
-
-    # remove all materials in the scene
-    Validate.cleanup_materials()
-
-    # get lastest version of path
-    lastest_version_path = utils.get_latest_version_in_folder_based(ref_path=ref_path)
-    print("recent version : ", ref_path)
-    print("lastest version : ", lastest_version_path)
-
-    # reference new file
-    cmds.file(lastest_version_path, reference=True, namespace=namespace)
-    cmds.parent("{}:geo".format(namespace), "Geometry")
-
-    # transfer skin weight
-    cmds.select("old_geo", "{}:geo".format(namespace))
-    Skin.fast_copy_weight()
-
-    # rename all transform in old geo back
-    cmds.select("old_geo")
-    General.sort_by_type(typ="transform")
-    list_children = cmds.ls(sl=1)
-    list_children = list_children[::-1]
-    list_children.remove("old_geo")
-
-    for node in list_children:
-        name = Utility.cut(node, hierarchy=True)
-        cmds.rename(node, "old_{}".format(name))
-
-    # polish hide
-    cmds.setAttr("old_geo.v", False)
 
 
 def export_selected_skin():

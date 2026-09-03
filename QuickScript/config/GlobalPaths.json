@@ -1,0 +1,12 @@
+{
+    "paths":[
+    "custom_library/DECK_Rig.py",
+    "custom_library/DECK_Model.py",
+    "custom_library/DECK_Dev.py",
+    "custom_library/DECK_Blender.py",
+    "custom_library/DECK_QuickData.py",
+    "custom_library/DECK_MathKits.py",
+    "custom_library/AttrDebugger.py",
+    "custom_library/Publisher.py"
+]
+}

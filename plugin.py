@@ -36,9 +36,8 @@ def register(api) -> None:
 
     # order ต้องน้อยกว่า UkoreMenu เอง (order 99) เพื่อให้ import (และ
     # register_item ของ UkoreRigToolkit) รันเสร็จก่อน UkoreMenu สั่ง
-    # rebuild_menu — เมนู Renamer/Attribute/Python Reader/Quick Data/Easy
+    # rebuild_menu — เมนู Renamer/Attribute/Rig Script/Quick Data/Easy
     # Controller/Snapper/Weight Puller เดิมถูก MayaToolkit เป็นคน register
-    # แทน (ทั้งที่ implementation ย้ายออกมาที่นี่แล้ว) ย้ายมาให้ปลั๊กอินนี้
     # ประกาศ launch_hooks ของตัวเองแทน แบบเดียวกับ AdvancedSkeleton/
     # UkoreReferenceEditor/ShotSplitter
     hooks = bridge.get("launch_hooks", {})

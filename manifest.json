@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "api_version": 1,
   "entry_point": "plugin.py",
-  "description": "Rigging tool suite for Maya (Attribute, BeamSmear, EasyController, PythonReader, QuickData, Renamer, Snapper, WeightPuller). Contributes its own folder to the Maya Launcher env bridge and registers its own menu items into ukore_menu's central registry — does not launch Maya itself.",
+  "description": "Rigging tool suite for Maya (Attribute, BeamSmear, EasyController, MergeSkin, QuickData, QuickScript, Renamer, RigScript, RigUpdater, Snapper, WeightPuller). Contributes its own folder to the Maya Launcher env bridge and registers its own menu items into ukore_menu's central registry — does not launch Maya itself.",
   "requires": ["maya_toolkit", "ukore_menu"]
 }
